@@ -1,8 +1,11 @@
 {
-  "name": "obsidian-link-indexer",
-  "author": "Yuliya Bagriy <aviskas@gmail.com>",
-  "version": "1.0.0",
-  "description": "Generate index notes for Obsidian with links based on various conditions",
+  "name": "obsidian-link-indexer-pnx",
+  "author": "Topher Warrington (Updater - current) and Yuliya Bagriy (Original Code - 2021)",
+  "contributors": [
+    "topher-codes"
+  ],
+  "version": "1.1.0",
+  "description": "Generate an index of your links/terms '[[]]' based on various conditions, with table format and connected terms tracking",
   "main": "main.js",
   "scripts": {
     "dev": "rollup --config rollup.config.js -w",
@@ -20,7 +23,7 @@
     "@rollup/plugin-typescript": "^6.0.0",
     "@types/node": "^14.14.8",
     "@types/picomatch": "^2.2.1",
-    "obsidian": "https://github.com/obsidianmd/obsidian-api/tarball/master",
+    "obsidian": "latest",
     "rollup": "^2.33.2",
     "standard-version": "^9.0.0",
     "tslib": "^2.0.3",
@@ -31,3 +34,4 @@
     "picomatch": "^2.2.2"
   }
 }
+  

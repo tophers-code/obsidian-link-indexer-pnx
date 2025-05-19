@@ -1,10 +1,15 @@
-# obsidian-link-indexer
+# obsidian-link-indexer-pnx
 
-This plugin for [Obsidian](https://obsidian.md/) generates index notes with links based on various conditions.
+This plugin for [Obsidian](https://obsidian.md/) generates index notes with links based on various conditions, now with enhanced table formatting and connected terms tracking.
 
-[Read changelog here](https://github.com/aviskase/obsidian-link-indexer/releases/latest).
+## Features
 
-WARNING: I'm no longer using this plugin myself ¯\\\_(ツ)_/¯
+- Creates table-based index notes listing all links in your vault
+- Tracks how many times each link is used
+- Shows connected terms (different versions of the same link)
+- Sort alphabetically or by frequency
+- Customizable exclusion patterns for specific files or folders
+- Support for embedded links
 
 ## Usage
 
@@ -24,84 +29,47 @@ Vault had:
 
 Command will create an index note (check path in settings) with the content:
 
-```
-2 [[B]]
-2 [[C]]
-1 [[X]]
+```markdown
+| Count | Link | Connected Terms |
+|-------|------|----------------|
+| 2 | [[B]] | B, b |
+| 2 | [[C]] | C, c |
+| 1 | [[X]] | X |
 ```
 
-#### Output options
+#### Output Settings
 
 **Include embeds** counts both `![[file]]` and `[[file]]` links. When disabled, it will count only `[[file]]` links.
 
-**Nonexistent files only**. When enabled, the example above would generate a note with only `1 [[X]]`.
+**Nonexistent files only**. When enabled, the example above would generate a note with only the X entry.
+
+**Sort alphabetically**. When enabled, links will be sorted alphabetically instead of by frequency count.
 
 **Strict line breaks** corresponds to the same Editor setting: "off" = one line break, "on" = two line breaks.
 
-On:
-
-```
-2 [[B]]
-
-2 [[C]]
-
-1 [[X]]
-```
+**Link to files**. When "on" the output file will use wiki-links to files. Disable if you don't want to pollute graph with it.
 
 Off:
 
-```
-2 [[B]]
-2 [[C]]
-1 [[X]]
-```
-
-**Link to files**. When "on" the output file will use wiki-links to files. Disable if you don\'t want to pollute graph with it.
-
-On:
-
-```
-2 [[B]]
-2 [[C]]
-1 [[X]]
-```
-
-Off:
-
-```
-2 B
-2 C
-1 X
+```markdown
+| Count | Link | Connected Terms |
+|-------|------|----------------|
+| 2 | B | B, b |
+| 2 | C | C, c |
+| 1 | X | X |
 ```
 
 **Exclude links from files** and **Exclude links to files** allow skipping files during indexing. Both accept regex patterns. If you need several excludes, add them on separate lines. Exclusion is checked only for existing files and only for filename without path.
 
-For example, if exclude *from* is set to `B`, the plugin won't count any links in this file and the output would be:
-
-```
-2 [[B]]
-1 [[C]]
-1 [[X]]
-```
-
-If exclude *to* is set to `B`, then any links to this file will be ignored, and the output will be:
-
-```
-2 [[C]]
-1 [[X]]
-```
-
-If both exclude *from* and *to* are set to `B`, the the output will be:
-
-```
-1 [[C]]
-1 [[X]]
-```
-
-**Exclude links from paths** and **Exclude links to paths** works similarly to filename exclusion, but accept glob patterns. Check [picomatch docs](https://www.npmjs.com/package/picomatch#globbing-features) for detailed information. Useful, when you want to exclude some directories, for example, exclude everything from directory *Dailies* is `Dailies/**/*`. 
-
+**Exclude links from paths** and **Exclude links to paths** works similarly to filename exclusion, but accept glob patterns. Check [picomatch docs](https://www.npmjs.com/package/picomatch#globbing-features) for detailed information. Useful when you want to exclude some directories, for example, exclude everything from directory *Dailies* is `Dailies/**/*`. 
 
 ## Compatibility
-v0.0.1 was developed against Obsidian v0.9.12, but it may work in earlier versions (v0.9.7+).
+This plugin was originally developed against Obsidian v0.9.12, but the updated version should work on recent Obsidian releases.
 
-Next releases will continue to target v0.9.12+.
+## Credits
+- Originally created by [Yuliya Bagriy](https://github.com/aviskase) in 2020-2021
+- Updated by Topher Warrington in 2025 to include table formatting and connected terms tracking
+- The plugin update process was streamlined with assistance from Anthropic's Claude AI, which helped analyze the codebase and implement the new features
+
+## License
+MIT License

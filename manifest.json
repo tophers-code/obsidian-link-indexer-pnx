@@ -1,11 +1,11 @@
 {
-  "id": "obsidian-link-indexer",
-  "name": "Link indexer",
-  "description": "Generate index notes with links based on various conditions",
+  "id": "obsidian-link-indexer-pnx",
+  "name": "Link Indexer - PNX version",
+  "description": "Generate an index of your links/terms '[[]]' based on various conditions, with table format and connected terms tracking",
   "isDesktopOnly": false,
-  "version": "1.0.0",
-  "minAppVersion": "0.9.12",
-  "author": "Yuliya Bagriy",
-  "authorUrl": "https://github.com/aviskase",
+  "version": "1.1.0",
+  "minAppVersion": "0.12.0",
+  "author": "Topher Warrington (Updater - current) and Yuliya Bagriy (Original Code - 2021)",
+  "authorUrl": "https://github.com/tophers-code/obsidian-link-indexer-pnx",
   "js": "main.js"
 }

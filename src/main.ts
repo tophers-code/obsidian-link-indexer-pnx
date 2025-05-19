@@ -5,6 +5,7 @@ import { Plugin, PluginSettingTab, Setting, Vault, normalizePath, TFile, getLink
 interface IndexNode {
   count: number;
   link: string;
+  originalLinks: string[]; // Store original link variations
 }
 
 export default class LinkIndexer extends Plugin {
@@ -70,9 +71,32 @@ export default class LinkIndexer extends Plugin {
         this.grabLinks(uniqueLinks, f, this.app.metadataCache.getFileCache(f).embeds, preset)
       }
     });
-    const sortedLinks = Object.entries(uniqueLinks).sort((a, b) => b[1].count - a[1].count);
-    const separator = preset.strictLineBreaks ? '\n\n' : '\n';
-    const content = sortedLinks.map((l) => `${l[1].count} ${l[1].link}`).join(separator);
+
+    // Sort links based on user preference
+    let sortedLinks;
+    if (preset.sortAlphabetically) {
+      sortedLinks = Object.entries(uniqueLinks).sort((a, b) => {
+        // Remove brackets for alphabetical sorting
+        const linkA = a[1].link.replace(/[\[\]]/g, '').toLowerCase();
+        const linkB = b[1].link.replace(/[\[\]]/g, '').toLowerCase();
+        return linkA.localeCompare(linkB);
+      });
+    } else {
+      sortedLinks = Object.entries(uniqueLinks).sort((a, b) => b[1].count - a[1].count);
+    }
+
+    // Create table header
+    let content = "| Count | Link | Connected Terms |\n";
+    content += "|-------|------|----------------|\n";
+
+    // Add table rows
+    sortedLinks.forEach(([key, node]) => {
+      const connectedTerms = node.originalLinks
+        .filter((term, index, self) => self.indexOf(term) === index) // Remove duplicates
+        .join(", ");
+      content += `| ${node.count} | ${node.link} | ${connectedTerms} |\n`;
+    });
+
     const exist = await this.app.vault.adapter.exists(normalizePath(preset.path), false);
     if (exist) {
       const p = this.app.vault.getAbstractFileByPath(normalizePath(preset.path));
@@ -96,14 +120,22 @@ export default class LinkIndexer extends Plugin {
       if (originFile && (preset.nonexistentOnly || this.isExcluded(originFile, preset.excludeToFilenames, preset.excludeToGlobs))) {
         return;
       }
+
       const origin = originFile ? originFile.path : link;
-      if (uniqueLinks[origin]) {
-        uniqueLinks[origin].count += 1;
+      const normalizedOrigin = origin.toLowerCase(); // Normalize for connected terms tracking
+
+      // Track the original link text for connected terms feature
+      const originalLinkText = l.original || link;
+
+      if (uniqueLinks[normalizedOrigin]) {
+        uniqueLinks[normalizedOrigin].count += 1;
+        uniqueLinks[normalizedOrigin].originalLinks.push(originalLinkText);
       } else {
         const rawLink = originFile ? this.app.metadataCache.fileToLinktext(originFile, preset.path, true) : link;
-        uniqueLinks[origin] = {
+        uniqueLinks[normalizedOrigin] = {
           count: 1,
-          link: preset.linkToFiles ? `[[${rawLink}]]` : rawLink
+          link: preset.linkToFiles ? `[[${rawLink}]]` : rawLink,
+          originalLinks: [originalLinkText]
         };
       }
     });
@@ -117,6 +149,7 @@ class UsedLinks {
   includeEmbeds = true;
   linkToFiles = true;
   nonexistentOnly = false;
+  sortAlphabetically = false; // New option for alphabetical sorting
   excludeToFilenames: string[] = [];
   excludeToGlobs: string[] = [];
   excludeFromFilenames: string[] = [];
@@ -197,6 +230,18 @@ class LinkIndexerSettingTab extends PluginSettingTab {
             })
         );
 
+      // Add the new setting for alphabetical sorting
+      new Setting(containerEl)
+        .setName('Sort alphabetically')
+        .setDesc('When enabled, links will be sorted alphabetically instead of by count.')
+        .addToggle((value) => 
+          value
+            .setValue(report.sortAlphabetically)
+            .onChange(async (value) => {
+              report.sortAlphabetically = value;
+              await this.saveData({ refreshUI: false });
+            })
+        );
 
       new Setting(containerEl)
         .setName('Strict line breaks')
