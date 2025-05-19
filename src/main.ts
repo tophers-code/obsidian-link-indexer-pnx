@@ -11,65 +11,76 @@ interface IndexNode {
 export default class LinkIndexer extends Plugin {
   settings: LinkIndexerSettings;
   vault: Vault;
-  globalExcludes: string[]
+  globalExcludes: string[];
+  registeredCommandIds: string[] = [];
 
   onInit() {}
 
   async onload() {
-    console.log("Link Indexer PNX: Plugin loading...");
+    console.log("Link Indexer (PNX): Plugin loading...");
     
     const loadedSettings = await this.loadData();
     if (loadedSettings) {
-      console.log("Link Indexer PNX: Loaded settings:", loadedSettings);
+      console.log("Link Indexer (PNX): Loaded settings:", loadedSettings);
       this.settings = deepmerge(new LinkIndexerSettings(), loadedSettings);
       this.settings.usedLinks = [];
       loadedSettings.usedLinks?.forEach((r: UsedLinks) => {
         this.settings.usedLinks.push(deepmerge(new UsedLinks(), r))
       });
     } else {
-      console.log("Link Indexer PNX: No saved settings found, using defaults");
+      console.log("Link Indexer (PNX): No saved settings found, using defaults");
       this.settings = new LinkIndexerSettings();
     }
     
-    this.reloadSettings();
+    this.setupCommands();
     this.addSettingTab(new LinkIndexerSettingTab(this.app, this));
     
-    console.log("Link Indexer PNX: Plugin loaded successfully");
+    console.log("Link Indexer (PNX): Plugin loaded successfully");
   }
 
   async onunload() {
-    console.log("Link Indexer PNX: Plugin unloaded");
+    console.log("Link Indexer (PNX): Plugin unloaded");
+    // No need to clear commands - Obsidian handles this automatically on plugin unload
     await this.saveData(this.settings);
   }
 
-  reloadSettings() {
-    console.log("Link Indexer PNX: Reloading settings and commands");
-    this.removeOwnCommands();
+  // Brand new function name to avoid any conflicts or references to old code
+  setupCommands() {
+    console.log("Link Indexer (PNX): Setting up commands");
+    
+    // Clear existing command references
+    this.registeredCommandIds = [];
+    
     this.globalExcludes = [];
     this.settings.usedLinks.forEach((r: UsedLinks) => {
       this.globalExcludes.push(r.path);
-      this.addCommand({
-        id: `link-indexer:used-links:${r.name}`,
-        name: `Used links - ${r.name}`,
-        callback: async () => await this.generateAllUsedLinksIndex(getPresetByName(this.settings.usedLinks, r.name)),
-      });
-    });
-    console.log("Link Indexer PNX: Added commands for presets:", this.settings.usedLinks.map(r => r.name));
-  }
-
-  removeOwnCommands() {
-    // @ts-ignore
-    this.app.commands.listCommands().map((c) => c.id).filter((c) => c.startsWith(this.manifest.id)).forEach((c: string) => {
-      // @ts-ignore
-      this.app.commands.removeCommand(c);
+      
+      // Register command for this preset
+      const commandId = `link-indexer-pnx:used-links:${r.name}`;
+      try {
+        this.addCommand({
+          id: commandId,
+          name: `Used links - ${r.name}`,
+          callback: async () => {
+            console.log(`Link Indexer (PNX): Executing command for preset ${r.name}`);
+            await this.generateAllUsedLinksIndex(getPresetByName(this.settings.usedLinks, r.name));
+          }
+        });
+        
+        // Keep track of registered command
+        this.registeredCommandIds.push(commandId);
+        console.log(`Link Indexer (PNX): Added command for preset: ${r.name}`);
+      } catch (e) {
+        console.error(`Link Indexer (PNX): Failed to register command for preset ${r.name}:`, e);
+      }
     });
   }
 
   async generateAllUsedLinksIndex(preset: UsedLinks) {
-    console.log("Link Indexer PNX: Starting index generation for preset:", preset?.name);
+    console.log("Link Indexer (PNX): Starting index generation for preset:", preset?.name);
     
     if (!preset) {
-      console.error("Link Indexer PNX: Preset not found");
+      console.error("Link Indexer (PNX): Preset not found");
       return new Notice(`Preset not found. Try reloading Obsidian.`);
     }
     
@@ -78,7 +89,7 @@ export default class LinkIndexer extends Plugin {
 
       // Get all markdown files
       const files = this.app.vault.getMarkdownFiles();
-      console.log(`Link Indexer PNX: Processing ${files.length} markdown files`);
+      console.log(`Link Indexer (PNX): Processing ${files.length} markdown files`);
       
       // Process each file
       let processedCount = 0;
@@ -94,7 +105,7 @@ export default class LinkIndexer extends Plugin {
           
           const fileCache = this.app.metadataCache.getFileCache(f);
           if (!fileCache) {
-            console.warn(`Link Indexer PNX: No file cache for ${f.path}, skipping`);
+            console.warn(`Link Indexer (PNX): No file cache for ${f.path}, skipping`);
             skippedCount++;
             continue;
           }
@@ -109,13 +120,13 @@ export default class LinkIndexer extends Plugin {
           
           processedCount++;
         } catch (error) {
-          console.error(`Link Indexer PNX: Error processing file ${f.path}:`, error);
+          console.error(`Link Indexer (PNX): Error processing file ${f.path}:`, error);
           errorCount++;
         }
       }
       
-      console.log(`Link Indexer PNX: Processed ${processedCount} files, skipped ${skippedCount}, errors in ${errorCount}`);
-      console.log(`Link Indexer PNX: Found ${Object.keys(uniqueLinks).length} unique links`);
+      console.log(`Link Indexer (PNX): Processed ${processedCount} files, skipped ${skippedCount}, errors in ${errorCount}`);
+      console.log(`Link Indexer (PNX): Found ${Object.keys(uniqueLinks).length} unique links`);
       
       // Sort links based on user preference
       let sortedLinks;
@@ -144,21 +155,20 @@ export default class LinkIndexer extends Plugin {
 
       // Write to output file
       const outputPath = normalizePath(preset.path);
-      console.log(`Link Indexer PNX: Writing results to ${outputPath}`);
+      console.log(`Link Indexer (PNX): Writing results to ${outputPath}`);
       
       const exist = await this.app.vault.adapter.exists(outputPath, false);
       if (exist) {
-        const p = this.app.vault.getAbstractFileByPath(outputPath);
         await this.app.vault.adapter.write(outputPath, content);
-        console.log(`Link Indexer PNX: Updated existing file at ${outputPath}`);
+        console.log(`Link Indexer (PNX): Updated existing file at ${outputPath}`);
       } else {
         await this.app.vault.create(outputPath, content);
-        console.log(`Link Indexer PNX: Created new file at ${outputPath}`);
+        console.log(`Link Indexer (PNX): Created new file at ${outputPath}`);
       }
       
-      new Notice(`Link Indexer PNX: Successfully generated index with ${Object.keys(uniqueLinks).length} unique links`);
+      new Notice(`Link Indexer (PNX): Successfully generated index with ${Object.keys(uniqueLinks).length} unique links`);
     } catch (error) {
-      console.error("Link Indexer PNX: Error in generateAllUsedLinksIndex:", error);
+      console.error("Link Indexer (PNX): Error in generateAllUsedLinksIndex:", error);
       new Notice(`Error generating index: ${error.message}`);
     }
   }
@@ -408,7 +418,7 @@ class LinkIndexerSettingTab extends PluginSettingTab {
   async saveData(options = { refreshUI: true }) {
     const plugin: LinkIndexer = (this as any).plugin;
     await plugin.saveData(plugin.settings);
-    plugin.reloadSettings();
+    plugin.setupCommands(); // Updated to use new function name
     if (options.refreshUI) this.display();
   }
 }
