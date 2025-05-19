@@ -1,0 +1,11 @@
+Ideas for Enhancements: 
+
+1. (done) Make the Index a table that is alphabetized (toggled). This will make it nicer when outputed via HTML for web interfaces and easier to sort through. 
+2. (done) Show the various ways the term is used/linked (ie `[[Human Connection|human connection]]` should have "Human Connection" as the term/link and "human connection" as an additional term.)
+3. (done) Toggle log codes in console from the settings, that way a user can turn off the logging of the plugin to keep their console clean of our comments if they don't need them. 
+4. The current "Links" want to go to pages that I guess would make sense to define or be about the term. Not necessarily links back to where the term was used. How best could we incorporate the Open Graph view function with this? Is there a way that we could have a 4th column that has a link that when clicked would open the Graph view to that term showing where it connects? 
+5. Searching notes for missed links to terms and create a new note listing the missing links
+6. Transform any links found that are not Cap links. (ie if the link found is [[human connection]] it should be updated to `[[Human Connection|human connection]]`
+7. Advanced search for similar words that could be connected and create a note listing potential links (ie humans, human, connection may all be listed for "Human Connection")
+8. Can we add the ability to sort the table? Or search the table for a term? 
+9. Can we just update the note with new counts and terms/ additional terms? If we can do that, then maybe we could add a column with definitions that the user can write themselves and make this an actuall "Glossary" page on their site. But, if the note keeps getting re-written each run; that becomes an issue. 
