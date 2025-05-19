@@ -16,27 +16,34 @@ export default class LinkIndexer extends Plugin {
   onInit() {}
 
   async onload() {
+    console.log("Link Indexer PNX: Plugin loading...");
+    
     const loadedSettings = await this.loadData();
     if (loadedSettings) {
+      console.log("Link Indexer PNX: Loaded settings:", loadedSettings);
       this.settings = deepmerge(new LinkIndexerSettings(), loadedSettings);
       this.settings.usedLinks = [];
       loadedSettings.usedLinks?.forEach((r: UsedLinks) => {
         this.settings.usedLinks.push(deepmerge(new UsedLinks(), r))
       });
     } else {
+      console.log("Link Indexer PNX: No saved settings found, using defaults");
       this.settings = new LinkIndexerSettings();
     }
+    
     this.reloadSettings();
-
     this.addSettingTab(new LinkIndexerSettingTab(this.app, this));
-  
+    
+    console.log("Link Indexer PNX: Plugin loaded successfully");
   }
 
   async onunload() {
+    console.log("Link Indexer PNX: Plugin unloaded");
     await this.saveData(this.settings);
   }
 
   reloadSettings() {
+    console.log("Link Indexer PNX: Reloading settings and commands");
     this.removeOwnCommands();
     this.globalExcludes = [];
     this.settings.usedLinks.forEach((r: UsedLinks) => {
@@ -47,6 +54,7 @@ export default class LinkIndexer extends Plugin {
         callback: async () => await this.generateAllUsedLinksIndex(getPresetByName(this.settings.usedLinks, r.name)),
       });
     });
+    console.log("Link Indexer PNX: Added commands for presets:", this.settings.usedLinks.map(r => r.name));
   }
 
   removeOwnCommands() {
@@ -58,51 +66,100 @@ export default class LinkIndexer extends Plugin {
   }
 
   async generateAllUsedLinksIndex(preset: UsedLinks) {
+    console.log("Link Indexer PNX: Starting index generation for preset:", preset?.name);
+    
     if (!preset) {
-      return new Notice(`${preset} was not found. Try reloading Obsidian.`);
+      console.error("Link Indexer PNX: Preset not found");
+      return new Notice(`Preset not found. Try reloading Obsidian.`);
     }
-    const uniqueLinks: Record<string, IndexNode> = {};
+    
+    try {
+      const uniqueLinks: Record<string, IndexNode> = {};
 
-    const files = this.app.vault.getMarkdownFiles();
-    files.forEach((f) => {
-      if (this.isExcluded(f, preset.excludeFromFilenames, preset.excludeFromGlobs)) return;
-      this.grabLinks(uniqueLinks, f, this.app.metadataCache.getFileCache(f).links, preset)
-      if (preset.includeEmbeds) {
-        this.grabLinks(uniqueLinks, f, this.app.metadataCache.getFileCache(f).embeds, preset)
+      // Get all markdown files
+      const files = this.app.vault.getMarkdownFiles();
+      console.log(`Link Indexer PNX: Processing ${files.length} markdown files`);
+      
+      // Process each file
+      let processedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      
+      for (const f of files) {
+        try {
+          if (this.isExcluded(f, preset.excludeFromFilenames, preset.excludeFromGlobs)) {
+            skippedCount++;
+            continue;
+          }
+          
+          const fileCache = this.app.metadataCache.getFileCache(f);
+          if (!fileCache) {
+            console.warn(`Link Indexer PNX: No file cache for ${f.path}, skipping`);
+            skippedCount++;
+            continue;
+          }
+          
+          if (fileCache.links) {
+            this.grabLinks(uniqueLinks, f, fileCache.links, preset);
+          }
+          
+          if (preset.includeEmbeds && fileCache.embeds) {
+            this.grabLinks(uniqueLinks, f, fileCache.embeds, preset);
+          }
+          
+          processedCount++;
+        } catch (error) {
+          console.error(`Link Indexer PNX: Error processing file ${f.path}:`, error);
+          errorCount++;
+        }
       }
-    });
+      
+      console.log(`Link Indexer PNX: Processed ${processedCount} files, skipped ${skippedCount}, errors in ${errorCount}`);
+      console.log(`Link Indexer PNX: Found ${Object.keys(uniqueLinks).length} unique links`);
+      
+      // Sort links based on user preference
+      let sortedLinks;
+      if (preset.sortAlphabetically) {
+        sortedLinks = Object.entries(uniqueLinks).sort((a, b) => {
+          // Remove brackets for alphabetical sorting
+          const linkA = a[1].link.replace(/[\[\]]/g, '').toLowerCase();
+          const linkB = b[1].link.replace(/[\[\]]/g, '').toLowerCase();
+          return linkA.localeCompare(linkB);
+        });
+      } else {
+        sortedLinks = Object.entries(uniqueLinks).sort((a, b) => b[1].count - a[1].count);
+      }
 
-    // Sort links based on user preference
-    let sortedLinks;
-    if (preset.sortAlphabetically) {
-      sortedLinks = Object.entries(uniqueLinks).sort((a, b) => {
-        // Remove brackets for alphabetical sorting
-        const linkA = a[1].link.replace(/[\[\]]/g, '').toLowerCase();
-        const linkB = b[1].link.replace(/[\[\]]/g, '').toLowerCase();
-        return linkA.localeCompare(linkB);
+      // Create table header
+      let content = "| Count | Link | Connected Terms |\n";
+      content += "|-------|------|----------------|\n";
+
+      // Add table rows
+      sortedLinks.forEach(([key, node]) => {
+        const connectedTerms = node.originalLinks
+          .filter((term, index, self) => self.indexOf(term) === index) // Remove duplicates
+          .join(", ");
+        content += `| ${node.count} | ${node.link} | ${connectedTerms} |\n`;
       });
-    } else {
-      sortedLinks = Object.entries(uniqueLinks).sort((a, b) => b[1].count - a[1].count);
-    }
 
-    // Create table header
-    let content = "| Count | Link | Connected Terms |\n";
-    content += "|-------|------|----------------|\n";
-
-    // Add table rows
-    sortedLinks.forEach(([key, node]) => {
-      const connectedTerms = node.originalLinks
-        .filter((term, index, self) => self.indexOf(term) === index) // Remove duplicates
-        .join(", ");
-      content += `| ${node.count} | ${node.link} | ${connectedTerms} |\n`;
-    });
-
-    const exist = await this.app.vault.adapter.exists(normalizePath(preset.path), false);
-    if (exist) {
-      const p = this.app.vault.getAbstractFileByPath(normalizePath(preset.path));
-      this.app.vault.adapter.write(normalizePath(preset.path), content);
-    } else {
-      this.app.vault.create(preset.path, content);
+      // Write to output file
+      const outputPath = normalizePath(preset.path);
+      console.log(`Link Indexer PNX: Writing results to ${outputPath}`);
+      
+      const exist = await this.app.vault.adapter.exists(outputPath, false);
+      if (exist) {
+        const p = this.app.vault.getAbstractFileByPath(outputPath);
+        await this.app.vault.adapter.write(outputPath, content);
+        console.log(`Link Indexer PNX: Updated existing file at ${outputPath}`);
+      } else {
+        await this.app.vault.create(outputPath, content);
+        console.log(`Link Indexer PNX: Created new file at ${outputPath}`);
+      }
+      
+      new Notice(`Link Indexer PNX: Successfully generated index with ${Object.keys(uniqueLinks).length} unique links`);
+    } catch (error) {
+      console.error("Link Indexer PNX: Error in generateAllUsedLinksIndex:", error);
+      new Notice(`Error generating index: ${error.message}`);
     }
   }
 
@@ -114,7 +171,11 @@ export default class LinkIndexer extends Plugin {
   }
 
   grabLinks(uniqueLinks: Record<string, IndexNode>, f: TFile, links: ReferenceCache[], preset: UsedLinks) {
-    links?.forEach((l) => {
+    if (!links || !links.length) return;
+    
+    links.forEach((l) => {
+      if (!l || !l.link) return;
+      
       const link = getLinkpath(l.link);
       const originFile = this.app.metadataCache.getFirstLinkpathDest(link, f.path);
       if (originFile && (preset.nonexistentOnly || this.isExcluded(originFile, preset.excludeToFilenames, preset.excludeToGlobs))) {
@@ -179,6 +240,12 @@ class LinkIndexerSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     containerEl.createEl('h2', {text: 'Used links'});
+
+    if (plugin.settings.usedLinks.length === 0) {
+      containerEl.createEl('p', {
+        text: 'No presets defined yet. Click "Add preset" below to create one.'
+      });
+    }
 
     plugin.settings.usedLinks.forEach((report) => {
       new Setting(containerEl)
