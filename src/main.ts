@@ -6,6 +6,7 @@ interface IndexNode {
   count: number;
   link: string;
   originalLinks: string[]; // Store original link variations
+  displayName: string; // Clean display name
 }
 
 export default class LinkIndexer extends Plugin {
@@ -76,6 +77,51 @@ export default class LinkIndexer extends Plugin {
     });
   }
 
+  // Helper to clean and normalize wiki-links
+  cleanWikiLink(link: string): string {
+    // Remove [[ and ]] from wiki-links
+    return link.replace(/^\[\[/, '').replace(/\]\]$/, '');
+  }
+
+  // Extract display name from a link (without brackets)
+  extractDisplayName(link: string): string {
+    // Remove [[ and ]] from wiki-links
+    let cleanLink = this.cleanWikiLink(link);
+    
+    // Check if it's an embed with !
+    if (cleanLink.startsWith('!')) {
+      cleanLink = cleanLink.substring(1);
+    }
+    
+    // Handle aliased links (format: [[actual|display]])
+    if (cleanLink.includes('|')) {
+      return cleanLink.split('|')[0].trim();
+    }
+    
+    return cleanLink;
+  }
+
+  // Extract the alias part from a link if it exists
+  extractAlias(link: string): string | null {
+    // Remove [[ and ]] from wiki-links
+    let cleanLink = this.cleanWikiLink(link);
+    
+    // Check if it's an embed with !
+    if (cleanLink.startsWith('!')) {
+      cleanLink = cleanLink.substring(1);
+    }
+    
+    // Handle aliased links (format: [[actual|display]])
+    if (cleanLink.includes('|')) {
+      const parts = cleanLink.split('|');
+      if (parts.length > 1) {
+        return parts[1].trim();
+      }
+    }
+    
+    return null;
+  }
+
   async generateAllUsedLinksIndex(preset: UsedLinks) {
     console.log("Link Indexer (PNX): Starting index generation for preset:", preset?.name);
     
@@ -132,41 +178,98 @@ export default class LinkIndexer extends Plugin {
       let sortedLinks;
       if (preset.sortAlphabetically) {
         sortedLinks = Object.entries(uniqueLinks).sort((a, b) => {
-          // Remove brackets for alphabetical sorting
-          const linkA = a[1].link.replace(/[\[\]]/g, '').toLowerCase();
-          const linkB = b[1].link.replace(/[\[\]]/g, '').toLowerCase();
+          const linkA = a[1].displayName.toLowerCase();
+          const linkB = b[1].displayName.toLowerCase();
           return linkA.localeCompare(linkB);
         });
       } else {
         sortedLinks = Object.entries(uniqueLinks).sort((a, b) => b[1].count - a[1].count);
       }
 
-      // Create table header
+      // Create table header with just 3 columns
       let content = "| Count | Link | Connected Terms |\n";
       content += "|-------|------|----------------|\n";
 
       // Add table rows
       sortedLinks.forEach(([key, node]) => {
-        const connectedTerms = node.originalLinks
-          .filter((term, index, self) => self.indexOf(term) === index) // Remove duplicates
-          .join(", ");
-        content += `| ${node.count} | ${node.link} | ${connectedTerms} |\n`;
+        const mainLink = node.displayName;
+        
+        // Process connected terms
+        const connectedTerms = new Set<string>(); // Use a Set to automatically remove duplicates
+        
+        // Extract aliases from all original links and add them
+        node.originalLinks.forEach(linkText => {
+          const alias = this.extractAlias(linkText);
+          if (alias && alias !== mainLink) {
+            connectedTerms.add(alias);
+          }
+        });
+        
+        // Convert the Set to a string, making sure to escape any | characters
+        const connectedTermsText = Array.from(connectedTerms).join(", ");
+        
+        // Add the row to the table
+        content += `| ${node.count} | ${node.link} | ${connectedTermsText} |\n`;
       });
 
-      // Write to output file
-      const outputPath = normalizePath(preset.path);
-      console.log(`Link Indexer (PNX): Writing results to ${outputPath}`);
+      // Ensure proper path with .md extension
+      let outputPath = preset.path;
       
-      const exist = await this.app.vault.adapter.exists(outputPath, false);
-      if (exist) {
-        await this.app.vault.adapter.write(outputPath, content);
-        console.log(`Link Indexer (PNX): Updated existing file at ${outputPath}`);
-      } else {
-        await this.app.vault.create(outputPath, content);
-        console.log(`Link Indexer (PNX): Created new file at ${outputPath}`);
+      // Add .md extension if missing
+      if (!outputPath.endsWith('.md')) {
+        outputPath += '.md';
       }
       
-      new Notice(`Link Indexer (PNX): Successfully generated index with ${Object.keys(uniqueLinks).length} unique links`);
+      // Ensure path is normalized
+      outputPath = normalizePath(outputPath);
+      
+      console.log(`Link Indexer (PNX): Preparing to write to ${outputPath}`);
+      
+      try {
+        // Check if file exists
+        const exists = await this.app.vault.adapter.exists(outputPath);
+        console.log(`Link Indexer (PNX): File exists check: ${exists}`);
+        
+        if (exists) {
+          // Update existing file
+          await this.app.vault.adapter.write(outputPath, content);
+          console.log(`Link Indexer (PNX): Updated existing file at ${outputPath}`);
+          new Notice(`Link Indexer (PNX): Updated index at ${outputPath} with ${Object.keys(uniqueLinks).length} unique links`);
+        } else {
+          // Create new file - ensure directory exists
+          const dirPath = outputPath.substring(0, outputPath.lastIndexOf('/'));
+          
+          // If path contains directories, ensure they exist
+          if (dirPath && dirPath !== outputPath) {
+            const dirExists = await this.app.vault.adapter.exists(dirPath);
+            if (!dirExists) {
+              // Try to create directory if needed
+              try {
+                await this.app.vault.createFolder(dirPath);
+                console.log(`Link Indexer (PNX): Created directory ${dirPath}`);
+              } catch (e) {
+                console.error(`Link Indexer (PNX): Failed to create directory ${dirPath}:`, e);
+                new Notice(`Error: Could not create directory ${dirPath}`);
+                throw e;
+              }
+            }
+          }
+          
+          // Now create the file
+          await this.app.vault.create(outputPath, content);
+          console.log(`Link Indexer (PNX): Created new file at ${outputPath}`);
+          new Notice(`Link Indexer (PNX): Created new index at ${outputPath} with ${Object.keys(uniqueLinks).length} unique links`);
+        }
+        
+        // Verify file exists after operation
+        const finalCheck = await this.app.vault.adapter.exists(outputPath);
+        console.log(`Link Indexer (PNX): Final file exists check: ${finalCheck}`);
+        
+      } catch (error) {
+        console.error(`Link Indexer (PNX): Error writing to file ${outputPath}:`, error);
+        new Notice(`Error writing to file: ${error.message}`);
+        throw error;
+      }
     } catch (error) {
       console.error("Link Indexer (PNX): Error in generateAllUsedLinksIndex:", error);
       new Notice(`Error generating index: ${error.message}`);
@@ -197,6 +300,7 @@ export default class LinkIndexer extends Plugin {
 
       // Track the original link text for connected terms feature
       const originalLinkText = l.original || link;
+      const displayName = this.extractDisplayName(originalLinkText);
 
       if (uniqueLinks[normalizedOrigin]) {
         uniqueLinks[normalizedOrigin].count += 1;
@@ -206,7 +310,8 @@ export default class LinkIndexer extends Plugin {
         uniqueLinks[normalizedOrigin] = {
           count: 1,
           link: preset.linkToFiles ? `[[${rawLink}]]` : rawLink,
-          originalLinks: [originalLinkText]
+          originalLinks: [originalLinkText],
+          displayName: displayName
         };
       }
     });
@@ -228,7 +333,7 @@ class UsedLinks {
 
   constructor() {
     this.name = Date.now().toString();
-    this.path = `./used_links${this.name}.md`;
+    this.path = `used_links${this.name}`;  // Default without extension
   }
 }
 
@@ -272,7 +377,7 @@ class LinkIndexerSettingTab extends PluginSettingTab {
         );
       new Setting(containerEl)
         .setName('All used links')
-        .setDesc('Path to the note that will contain all found links sorted by their occurrences')
+        .setDesc('Path to the note that will contain all found links (add .md extension if desired)')
         .addText((text) => 
           text
             .setPlaceholder(report.path)
@@ -418,7 +523,7 @@ class LinkIndexerSettingTab extends PluginSettingTab {
   async saveData(options = { refreshUI: true }) {
     const plugin: LinkIndexer = (this as any).plugin;
     await plugin.saveData(plugin.settings);
-    plugin.setupCommands(); // Updated to use new function name
+    plugin.setupCommands();
     if (options.refreshUI) this.display();
   }
 }
