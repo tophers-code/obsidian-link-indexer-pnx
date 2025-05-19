@@ -54,7 +54,13 @@ export default class LinkIndexer extends Plugin {
     
     this.globalExcludes = [];
     this.settings.usedLinks.forEach((r: UsedLinks) => {
-      this.globalExcludes.push(r.path);
+      // Add output paths to global excludes to prevent counting links in the output file itself
+      let outputPath = r.path;
+      if (!outputPath.endsWith('.md')) {
+        outputPath += '.md';
+      }
+      outputPath = normalizePath(outputPath);
+      this.globalExcludes.push(outputPath);
       
       // Register command for this preset
       const commandId = `link-indexer-pnx:used-links:${r.name}`;
@@ -133,6 +139,13 @@ export default class LinkIndexer extends Plugin {
     try {
       const uniqueLinks: Record<string, IndexNode> = {};
 
+      // Ensure proper path with .md extension for exclusion checking
+      let outputPath = preset.path;
+      if (!outputPath.endsWith('.md')) {
+        outputPath += '.md';
+      }
+      outputPath = normalizePath(outputPath);
+
       // Get all markdown files
       const files = this.app.vault.getMarkdownFiles();
       console.log(`Link Indexer (PNX): Processing ${files.length} markdown files`);
@@ -144,6 +157,13 @@ export default class LinkIndexer extends Plugin {
       
       for (const f of files) {
         try {
+          // Skip the output file itself to prevent counting its own links
+          if (f.path === outputPath) {
+            console.log(`Link Indexer (PNX): Skipping output file ${f.path} to prevent self-counting`);
+            skippedCount++;
+            continue;
+          }
+          
           if (this.isExcluded(f, preset.excludeFromFilenames, preset.excludeFromGlobs)) {
             skippedCount++;
             continue;
@@ -213,15 +233,9 @@ export default class LinkIndexer extends Plugin {
       });
 
       // Ensure proper path with .md extension
-      let outputPath = preset.path;
-      
-      // Add .md extension if missing
       if (!outputPath.endsWith('.md')) {
         outputPath += '.md';
       }
-      
-      // Ensure path is normalized
-      outputPath = normalizePath(outputPath);
       
       console.log(`Link Indexer (PNX): Preparing to write to ${outputPath}`);
       
