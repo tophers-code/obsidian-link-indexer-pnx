@@ -18,36 +18,60 @@ export default class LinkIndexer extends Plugin {
   onInit() {}
 
   async onload() {
-    console.log("Link Indexer (PNX): Plugin loading...");
+    // Initialize settings first with defaults
+    this.settings = new LinkIndexerSettings();
+    
+    // Now safe to use logging
+    this.log("Plugin loading...");
     
     const loadedSettings = await this.loadData();
     if (loadedSettings) {
-      console.log("Link Indexer (PNX): Loaded settings:", loadedSettings);
+      this.log("Loaded settings:", loadedSettings);
       this.settings = deepmerge(new LinkIndexerSettings(), loadedSettings);
       this.settings.usedLinks = [];
       loadedSettings.usedLinks?.forEach((r: UsedLinks) => {
         this.settings.usedLinks.push(deepmerge(new UsedLinks(), r))
       });
     } else {
-      console.log("Link Indexer (PNX): No saved settings found, using defaults");
-      this.settings = new LinkIndexerSettings();
+      this.log("No saved settings found, using defaults");
     }
     
     this.setupCommands();
     this.addSettingTab(new LinkIndexerSettingTab(this.app, this));
     
-    console.log("Link Indexer (PNX): Plugin loaded successfully");
+    this.log("Plugin loaded successfully");
   }
 
   async onunload() {
-    console.log("Link Indexer (PNX): Plugin unloaded");
     // No need to clear commands - Obsidian handles this automatically on plugin unload
+    this.log("Plugin unloaded");
     await this.saveData(this.settings);
+  }
+
+  // Central logging function with safety check
+  log(message: string, ...args: any[]) {
+    if (this.settings?.enableConsoleLogging !== false) {
+      console.log(`Link Indexer (PNX): ${message}`, ...args);
+    }
+  }
+
+  // Central error logging function with safety check
+  logError(message: string, ...args: any[]) {
+    if (this.settings?.enableConsoleLogging !== false) {
+      console.error(`Link Indexer (PNX): ${message}`, ...args);
+    }
+  }
+
+  // Central warning logging function with safety check
+  logWarn(message: string, ...args: any[]) {
+    if (this.settings?.enableConsoleLogging !== false) {
+      console.warn(`Link Indexer (PNX): ${message}`, ...args);
+    }
   }
 
   // Brand new function name to avoid any conflicts or references to old code
   setupCommands() {
-    console.log("Link Indexer (PNX): Setting up commands");
+    this.log("Setting up commands");
     
     // Clear existing command references
     this.registeredCommandIds = [];
@@ -69,16 +93,16 @@ export default class LinkIndexer extends Plugin {
           id: commandId,
           name: `Used links - ${r.name}`,
           callback: async () => {
-            console.log(`Link Indexer (PNX): Executing command for preset ${r.name}`);
+            this.log(`Executing command for preset ${r.name}`);
             await this.generateAllUsedLinksIndex(getPresetByName(this.settings.usedLinks, r.name));
           }
         });
         
         // Keep track of registered command
         this.registeredCommandIds.push(commandId);
-        console.log(`Link Indexer (PNX): Added command for preset: ${r.name}`);
+        this.log(`Added command for preset: ${r.name}`);
       } catch (e) {
-        console.error(`Link Indexer (PNX): Failed to register command for preset ${r.name}:`, e);
+        this.logError(`Failed to register command for preset ${r.name}:`, e);
       }
     });
   }
@@ -129,10 +153,10 @@ export default class LinkIndexer extends Plugin {
   }
 
   async generateAllUsedLinksIndex(preset: UsedLinks) {
-    console.log("Link Indexer (PNX): Starting index generation for preset:", preset?.name);
+    this.log("Starting index generation for preset:", preset?.name);
     
     if (!preset) {
-      console.error("Link Indexer (PNX): Preset not found");
+      this.logError("Preset not found");
       return new Notice(`Preset not found. Try reloading Obsidian.`);
     }
     
@@ -148,7 +172,7 @@ export default class LinkIndexer extends Plugin {
 
       // Get all markdown files
       const files = this.app.vault.getMarkdownFiles();
-      console.log(`Link Indexer (PNX): Processing ${files.length} markdown files`);
+      this.log(`Processing ${files.length} markdown files`);
       
       // Process each file
       let processedCount = 0;
@@ -159,7 +183,7 @@ export default class LinkIndexer extends Plugin {
         try {
           // Skip the output file itself to prevent counting its own links
           if (f.path === outputPath) {
-            console.log(`Link Indexer (PNX): Skipping output file ${f.path} to prevent self-counting`);
+            this.log(`Skipping output file ${f.path} to prevent self-counting`);
             skippedCount++;
             continue;
           }
@@ -171,7 +195,7 @@ export default class LinkIndexer extends Plugin {
           
           const fileCache = this.app.metadataCache.getFileCache(f);
           if (!fileCache) {
-            console.warn(`Link Indexer (PNX): No file cache for ${f.path}, skipping`);
+            this.logWarn(`No file cache for ${f.path}, skipping`);
             skippedCount++;
             continue;
           }
@@ -186,13 +210,13 @@ export default class LinkIndexer extends Plugin {
           
           processedCount++;
         } catch (error) {
-          console.error(`Link Indexer (PNX): Error processing file ${f.path}:`, error);
+          this.logError(`Error processing file ${f.path}:`, error);
           errorCount++;
         }
       }
       
-      console.log(`Link Indexer (PNX): Processed ${processedCount} files, skipped ${skippedCount}, errors in ${errorCount}`);
-      console.log(`Link Indexer (PNX): Found ${Object.keys(uniqueLinks).length} unique links`);
+      this.log(`Processed ${processedCount} files, skipped ${skippedCount}, errors in ${errorCount}`);
+      this.log(`Found ${Object.keys(uniqueLinks).length} unique links`);
       
       // Sort links based on user preference
       let sortedLinks;
@@ -237,17 +261,17 @@ export default class LinkIndexer extends Plugin {
         outputPath += '.md';
       }
       
-      console.log(`Link Indexer (PNX): Preparing to write to ${outputPath}`);
+      this.log(`Preparing to write to ${outputPath}`);
       
       try {
         // Check if file exists
         const exists = await this.app.vault.adapter.exists(outputPath);
-        console.log(`Link Indexer (PNX): File exists check: ${exists}`);
+        this.log(`File exists check: ${exists}`);
         
         if (exists) {
           // Update existing file
           await this.app.vault.adapter.write(outputPath, content);
-          console.log(`Link Indexer (PNX): Updated existing file at ${outputPath}`);
+          this.log(`Updated existing file at ${outputPath}`);
           new Notice(`Link Indexer (PNX): Updated index at ${outputPath} with ${Object.keys(uniqueLinks).length} unique links`);
         } else {
           // Create new file - ensure directory exists
@@ -260,9 +284,9 @@ export default class LinkIndexer extends Plugin {
               // Try to create directory if needed
               try {
                 await this.app.vault.createFolder(dirPath);
-                console.log(`Link Indexer (PNX): Created directory ${dirPath}`);
+                this.log(`Created directory ${dirPath}`);
               } catch (e) {
-                console.error(`Link Indexer (PNX): Failed to create directory ${dirPath}:`, e);
+                this.logError(`Failed to create directory ${dirPath}:`, e);
                 new Notice(`Error: Could not create directory ${dirPath}`);
                 throw e;
               }
@@ -271,21 +295,21 @@ export default class LinkIndexer extends Plugin {
           
           // Now create the file
           await this.app.vault.create(outputPath, content);
-          console.log(`Link Indexer (PNX): Created new file at ${outputPath}`);
+          this.log(`Created new file at ${outputPath}`);
           new Notice(`Link Indexer (PNX): Created new index at ${outputPath} with ${Object.keys(uniqueLinks).length} unique links`);
         }
         
         // Verify file exists after operation
         const finalCheck = await this.app.vault.adapter.exists(outputPath);
-        console.log(`Link Indexer (PNX): Final file exists check: ${finalCheck}`);
+        this.log(`Final file exists check: ${finalCheck}`);
         
       } catch (error) {
-        console.error(`Link Indexer (PNX): Error writing to file ${outputPath}:`, error);
+        this.logError(`Error writing to file ${outputPath}:`, error);
         new Notice(`Error writing to file: ${error.message}`);
         throw error;
       }
     } catch (error) {
-      console.error("Link Indexer (PNX): Error in generateAllUsedLinksIndex:", error);
+      this.logError("Error in generateAllUsedLinksIndex:", error);
       new Notice(`Error generating index: ${error.message}`);
     }
   }
@@ -353,6 +377,7 @@ class UsedLinks {
 
 class LinkIndexerSettings {
   usedLinks: UsedLinks[] = [];
+  enableConsoleLogging = true; // New setting for console logging
 }
 
 type Preset = UsedLinks;
@@ -368,7 +393,23 @@ class LinkIndexerSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
-    containerEl.createEl('h2', {text: 'Used links'});
+    // Global settings section
+    containerEl.createEl('h2', {text: 'Global Settings'});
+    
+    // Console logging toggle
+    new Setting(containerEl)
+      .setName('Enable console logging')
+      .setDesc('Toggle detailed logging to the developer console. Useful for debugging.')
+      .addToggle((toggle) => 
+        toggle
+          .setValue(plugin.settings.enableConsoleLogging)
+          .onChange(async (value) => {
+            plugin.settings.enableConsoleLogging = value;
+            await plugin.saveData(plugin.settings);
+          })
+      );
+      
+    containerEl.createEl('h2', {text: 'Used Links Presets'});
 
     if (plugin.settings.usedLinks.length === 0) {
       containerEl.createEl('p', {
@@ -541,7 +582,6 @@ class LinkIndexerSettingTab extends PluginSettingTab {
     if (options.refreshUI) this.display();
   }
 }
-
 
 function pathEqual(a: string, b: string) {
   if (a === b) return true

@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 - Table format for index output with headers for better HTML display
 - Connected terms tracking to show variations of the same link
 - Option to sort links alphabetically instead of just by frequency
+- Toggle for console logging in settings to keep developer console clean
+- Central logging system with proper log types (info, warning, error)
 - Updated documentation with new features
 - Better compatibility with newer Obsidian versions
 - Acknowledgment of Claude AI's assistance with the update
@@ -15,7 +17,15 @@ All notable changes to this project will be documented in this file.
 - Modified the output format from simple list to proper Markdown table
 - Updated interface to include option for alphabetical sorting
 - Improved tracking of link variations for connected terms feature
+- Restructured settings with separate global and preset sections
+- Refactored logging system for better error handling and consistency
 - Updated package information and repository details
+- Fixed issue with duplicate counting by excluding output files from processing
+
+### Fixed
+- Resolved table formatting issues with pipe characters in connected terms
+- Fixed self-counting bug where the plugin would count links in its own output file
+- Improved error handling for settings initialization
 
 
 ## Previous Changes 
