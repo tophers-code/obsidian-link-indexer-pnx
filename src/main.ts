@@ -1,5 +1,6 @@
 import deepmerge from 'deepmerge';
 import picomatch from 'picomatch';
+import { Plugin, PluginSettingTab, Setting, Vault, normalizePath, TFile, getLinkpath, ReferenceCache, Notice, MarkdownPostProcessorContext } from 'obsidian';
 
 interface IndexNode {
   count: number;
@@ -38,9 +39,11 @@ export default class LinkIndexer extends Plugin {
     this.setupCommands();
     this.addSettingTab(new LinkIndexerSettingTab(this.app, this));
     
+    // Register a post processor for our special syntax 
     this.registerMarkdownPostProcessor((el, ctx) => {
       this.processGraphButtons(el, ctx);
     });
+    
     this.log("Plugin loaded successfully");
   }
 
@@ -48,6 +51,7 @@ export default class LinkIndexer extends Plugin {
   processGraphButtons(el: HTMLElement, ctx: MarkdownPostProcessorContext) {
     // Find all elements with our special class
     const graphButtons = el.querySelectorAll('.graph-button');
+    
     // Process each button
     graphButtons.forEach((button) => {
       // Get the note name from the data attribute
@@ -55,6 +59,7 @@ export default class LinkIndexer extends Plugin {
       if (!noteName) return;
       
       // Add click event listener
+      button.addEventListener('click', (e) => {
         e.preventDefault();
         this.openGraphForNote(noteName);
       });
@@ -116,7 +121,7 @@ export default class LinkIndexer extends Plugin {
     }
   }
 
-  // Brand new function name to avoid any conflicts or references to old code
+  // New function name to avoid any conflicts or references to old code
   setupCommands() {
     this.log("Setting up commands");
     
