@@ -69,7 +69,7 @@ This plugin was originally developed against Obsidian v0.9.12, but the updated v
 ## Credits
 - Originally created by [Yuliya Bagriy](https://github.com/aviskase) in 2020-2021
 - Updated by Topher Warrington in 2025 to include table formatting and connected terms tracking
-- The plugin update process was streamlined with assistance from Anthropic's Claude AI, which helped analyze the codebase and implement the new features
+- The plugin update process was streamlined with assistance from Anthropic's Claude AI, which helped analyze the codebase in order to implement the new features
 
 ## License
 MIT License

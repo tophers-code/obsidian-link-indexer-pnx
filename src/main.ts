@@ -1,6 +1,5 @@
 import deepmerge from 'deepmerge';
 import picomatch from 'picomatch';
-import { Plugin, PluginSettingTab, Setting, Vault, normalizePath, TFile, getLinkpath, ReferenceCache, Notice } from 'obsidian';
 
 interface IndexNode {
   count: number;
@@ -39,7 +38,55 @@ export default class LinkIndexer extends Plugin {
     this.setupCommands();
     this.addSettingTab(new LinkIndexerSettingTab(this.app, this));
     
+    this.registerMarkdownPostProcessor((el, ctx) => {
+      this.processGraphButtons(el, ctx);
+    });
     this.log("Plugin loaded successfully");
+  }
+
+  // Process the special syntax for graph buttons in rendered markdown
+  processGraphButtons(el: HTMLElement, ctx: MarkdownPostProcessorContext) {
+    // Find all elements with our special class
+    const graphButtons = el.querySelectorAll('.graph-button');
+    // Process each button
+    graphButtons.forEach((button) => {
+      // Get the note name from the data attribute
+      const noteName = button.getAttribute('data-note-name');
+      if (!noteName) return;
+      
+      // Add click event listener
+        e.preventDefault();
+        this.openGraphForNote(noteName);
+      });
+    });
+  }
+
+  // Function to open graph view for a specific note
+  openGraphForNote(noteName: string) {
+    this.log(`Opening graph view for: ${noteName}`);
+    
+    // Try to find the note in the vault
+    const files = this.app.vault.getMarkdownFiles();
+    const targetFile = files.find(f => {
+      // Check if the file name (without extension) matches
+      const fileNameWithoutExt = f.basename;
+      return fileNameWithoutExt === noteName;
+    });
+    
+    if (targetFile) {
+      // If found, open the file first (required to show its graph)
+      this.app.workspace.openLinkText(targetFile.path, '', false);
+      
+      // Then execute the graph view command
+      // This is the Obsidian internal command to open local graph
+      this.app.commands.executeCommandById('graph:open-local');
+      
+      this.log(`Opened graph for note: ${noteName}`);
+    } else {
+      // If not found, notify the user
+      new Notice(`Could not find note: ${noteName}`);
+      this.logWarn(`Could not find note: ${noteName}`);
+    }
   }
 
   async onunload() {
@@ -152,6 +199,12 @@ export default class LinkIndexer extends Plugin {
     return null;
   }
 
+  // Create a HTML button that will be processed by our post processor
+  createGraphViewButton(noteName: string): string {
+    // Create a span with our special class and data attribute
+    return `<span class="graph-button" data-note-name="${noteName}" title="Open graph view for ${noteName}">🔍</span>`;
+  }
+
   async generateAllUsedLinksIndex(preset: UsedLinks) {
     this.log("Starting index generation for preset:", preset?.name);
     
@@ -230,9 +283,25 @@ export default class LinkIndexer extends Plugin {
         sortedLinks = Object.entries(uniqueLinks).sort((a, b) => b[1].count - a[1].count);
       }
 
-      // Create table header with just 3 columns
-      let content = "| Count | Link | Connected Terms |\n";
-      content += "|-------|------|----------------|\n";
+      // Create table header with just 4 columns
+      // Start building the content with instructions at the top
+      let content = "";
+      
+      // Add instructions for using the Graph View links at the TOP
+      if (preset.includeGraphView) {
+        content += "## Using Graph View Links\n\n";
+        content += "Click the 🔍 icon next to the count to open that term's note along side it's local graph view. ";
+        content += "This feature works in Reading view and Edit view.\n\n";
+      }
+      
+      // Add table header - with Graph column as the SECOND column
+      if (preset.includeGraphView) {
+        content += "| Count | Graph | Term | Connected Terms |\n";
+        content += "|-------|-------|------|----------------|\n";
+      } else {
+        content += "| Count | Term | Connected Terms |\n";
+        content += "|-------|------|----------------|\n";
+      }
 
       // Add table rows
       sortedLinks.forEach(([key, node]) => {
@@ -249,11 +318,21 @@ export default class LinkIndexer extends Plugin {
           }
         });
         
-        // Convert the Set to a string, making sure to escape any | characters
+        // Convert the Set to a string
         const connectedTermsText = Array.from(connectedTerms).join(", ");
         
-        // Add the row to the table
-        content += `| ${node.count} | ${node.link} | ${connectedTermsText} |\n`;
+        // Create graph view button if enabled
+        let graphViewButton = "";
+        if (preset.includeGraphView) {
+          graphViewButton = this.createGraphViewButton(mainLink);
+        }
+        
+        // Add the row to the table - with Graph column as the SECOND column
+        if (preset.includeGraphView) {
+          content += `| ${node.count} | ${graphViewButton} | ${node.link} | ${connectedTermsText} |\n`;
+        } else {
+          content += `| ${node.count} | ${node.link} | ${connectedTermsText} |\n`;
+        }
       });
 
       // Ensure proper path with .md extension
@@ -364,6 +443,7 @@ class UsedLinks {
   linkToFiles = true;
   nonexistentOnly = false;
   sortAlphabetically = false; // New option for alphabetical sorting
+  includeGraphView = false;   // New option for including Graph View links
   excludeToFilenames: string[] = [];
   excludeToGlobs: string[] = [];
   excludeFromFilenames: string[] = [];
@@ -476,6 +556,19 @@ class LinkIndexerSettingTab extends PluginSettingTab {
             .setValue(report.sortAlphabetically)
             .onChange(async (value) => {
               report.sortAlphabetically = value;
+              await this.saveData({ refreshUI: false });
+            })
+        );
+        
+      // Add the new setting for including Graph View links
+      new Setting(containerEl)
+        .setName('Include Graph View links')
+        .setDesc('When enabled, adds a column with links to open the Graph View centered on each note.')
+        .addToggle((value) => 
+          value
+            .setValue(report.includeGraphView)
+            .onChange(async (value) => {
+              report.includeGraphView = value;
               await this.saveData({ refreshUI: false });
             })
         );
